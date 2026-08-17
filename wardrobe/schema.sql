@@ -1,3 +1,6 @@
+-----------------------------------------------------------------------------
+-- pieces table
+----------------------------------------------------------------------------
 DROP TABLE IF EXISTS pieces; -- drop pieces if it exists, enforces idempotency
 
 CREATE TABLE pieces(
@@ -37,3 +40,16 @@ VALUES
 DROP VIEW IF EXISTS required_info;
 CREATE VIEW required_info AS -- create view
 SELECT brand, name, category FROM pieces; -- selects brand, name, and category from pieces
+
+----------------------------------------------------------------------------
+-- outfits table
+----------------------------------------------------------------------------
+DROP TABLE IF EXISTS outfits; -- drop outfits if it exists, enforces idempotency
+
+CREATE TABLE outfits(
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    favorite INTEGER NOT NULL DEFAULT -- NOT NULL blocks explicit insertion of NULL (DEFAULT alone doesn't)
+    0 CHECK(favorite IN (0, 1)) -- restricts to 0 or 1, idiomatic for booleans
+)
+
