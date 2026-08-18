@@ -1,6 +1,6 @@
------------------------------------------------------------------------------
+----------------------------------------------------------------------------------
 -- pieces table
-----------------------------------------------------------------------------
+---------------------------------------------------------------------------------
 DROP TABLE IF EXISTS pieces; -- drop pieces if it exists, enforces idempotency
 
 CREATE TABLE pieces(
@@ -41,15 +41,29 @@ DROP VIEW IF EXISTS required_info;
 CREATE VIEW required_info AS -- create view
 SELECT brand, name, category FROM pieces; -- selects brand, name, and category from pieces
 
-----------------------------------------------------------------------------
+---------------------------------------------------------------------------------
 -- outfits table
-----------------------------------------------------------------------------
-DROP TABLE IF EXISTS outfits; -- drop outfits if it exists, enforces idempotency
+---------------------------------------------------------------------------------
+DROP TABLE IF EXISTS outfits; -- drop table if exist, idempotency purposes
 
 CREATE TABLE outfits(
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL,
     favorite INTEGER NOT NULL DEFAULT -- NOT NULL blocks explicit insertion of NULL (DEFAULT alone doesn't)
     0 CHECK(favorite IN (0, 1)) -- restricts to 0 or 1, idiomatic for booleans
-)
+);
 
+---------------------------------------------------------------------------------
+-- outfit_pieces table
+---------------------------------------------------------------------------------
+DROP TABLE IF EXISTS outfit_pieces; -- drop table if exist, idempotency purposes
+
+CREATE TABLE outfit_pieces(
+    outfit_id INTEGER NOT NULL 
+        REFERENCES outfits(id) -- foreign key referencing outfits table
+        ON DELETE CASCADE, -- if row from parent table is deleted, delete corresponding rows from this table (child)
+    piece_id INTEGER NOT NULL 
+        REFERENCES pieces(id) -- foreign key referencing pieces table
+        ON DELETE CASCADE,
+    PRIMARY KEY(outfit_id, piece_id) -- define composite primary key
+);
