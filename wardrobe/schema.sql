@@ -1,8 +1,12 @@
+PRAGMA foreign_keys = ON; -- enable foreign key supports
+
+DROP TABLE IF EXISTS outfit_pieces; -- drop child (has FKs); drop child before parent
+DROP TABLE IF EXISTS pieces; -- drop table if it exists, enforces idempotency
+DROP TABLE IF EXISTS outfits;
+
 ----------------------------------------------------------------------------------
 -- pieces table
 ---------------------------------------------------------------------------------
-DROP TABLE IF EXISTS pieces; -- drop pieces if it exists, enforces idempotency
-
 CREATE TABLE pieces(
     id INTEGER PRIMARY KEY, -- primary key
     brand TEXT NOT NULL, -- required field
@@ -44,8 +48,6 @@ SELECT brand, name, category FROM pieces; -- selects brand, name, and category f
 ---------------------------------------------------------------------------------
 -- outfits table
 ---------------------------------------------------------------------------------
-DROP TABLE IF EXISTS outfits; -- drop table if exist, idempotency purposes
-
 CREATE TABLE outfits(
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL,
@@ -53,11 +55,15 @@ CREATE TABLE outfits(
     0 CHECK(favorite IN (0, 1)) -- restricts to 0 or 1, idiomatic for booleans
 );
 
+INSERT INTO outfits (name, favorite)
+VALUES
+    ('Mostly Rick', 1),
+    ('Calm Tabi Fit', 0),
+    ('GO JAPAN', 0);
+
 ---------------------------------------------------------------------------------
 -- outfit_pieces table
 ---------------------------------------------------------------------------------
-DROP TABLE IF EXISTS outfit_pieces; -- drop table if exist, idempotency purposes
-
 CREATE TABLE outfit_pieces(
     outfit_id INTEGER NOT NULL 
         REFERENCES outfits(id) -- foreign key referencing outfits table
@@ -67,3 +73,25 @@ CREATE TABLE outfit_pieces(
         ON DELETE CASCADE,
     PRIMARY KEY(outfit_id, piece_id) -- define composite primary key
 );
+
+INSERT INTO outfit_pieces (outfit_id, piece_id)
+VALUES
+    (1, 1), (1, 10), (1, 6),
+    (2, 5), (2, 4), (2, 2), (2, 8),
+    (3, 2), (3, 3), (3, 4), (3, 7), (3, 9);
+
+SELECT * FROM outfit_pieces;
+
+---------------------------------------------------------------------------------
+-- tests
+---------------------------------------------------------------------------------
+INSERT INTO outfit_pieces (outfit_id, piece_id)
+VALUES
+    (1, 1), -- duplicate entry
+    (99, 1), -- non-existent outfit
+    (1, 99); -- non-existent piece
+
+-- SELECT * FROM pieces WHERE id = 4;
+DELETE FROM pieces WHERE id = 4; -- delete from piece to test cascade
+
+SELECT * FROM outfit_pieces;
