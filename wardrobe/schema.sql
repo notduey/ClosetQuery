@@ -41,8 +41,8 @@ VALUES
     ('Yohji Yamamoto', 'Origami Fold Clutch', 'Accessory', NULL, 'Black', NULL, 'Reserved', NULL, 'Leather'),
     ('Rick Owens', 'Ribbed Thermal Layer', 'Undergarment', 'M', 'Bone', 'Fall/Winter', 'Beater', 'Slim', 'Cotton Blend');
 
-DROP VIEW IF EXISTS required_info;
-CREATE VIEW required_info AS -- create view
+DROP VIEW IF EXISTS piece_overview;
+CREATE VIEW piece_overview AS -- create view
 SELECT brand, name, category FROM pieces; -- selects brand, name, and category from pieces
 
 ---------------------------------------------------------------------------------

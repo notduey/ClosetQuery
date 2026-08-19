@@ -61,3 +61,31 @@ DROP VIEW IF EXISTS name;
 
 JOINS (later)
 SELECT * FROM a JOIN b ON a.id = b.a_id;
+
+===============================================================================
+
+Other notes
+
+Every table should have a way to uniquely identify each row.
+That doesn't mean every table needs an id INTEGER PRIMARY KEY field.
+
+Foreign Key are disabled by default in SQLite to preserve backwards compatibility. Enabling:
+PRAGMA foreign_keys = ON;
+
+A 'composite' primary key consists of 2 or more columns as unique identifiers
+
+A primary key can still be 'NULL' in SQLite, except for exact constraints:
+-'id INTEGER PRIMARY KEY'
+-'... PRIMARY KEY NOT NULL'
+Due to a long-standing historical bug, it still exists to maintain backwards compatibility
+
+ON DELETE CASCADE is a constraint set to a foreign key, maintaining integrity of database by:
+- deleting corresponding child rows when a row in the parent table is deleted
+
+ON ALTER CASCASE has the same logic as ON DELETE CASCADE, just altering the row instead
+
+Join types:
+- INNER JOIN: Only rows that match in both tables
+- LEFT JOIN: All rows from the left table, matched data where it exists, NULL where it doesn't
+- IGHT JOIN: Same idea, mirrored (SQLite actually doesn't support RIGHT JOIN — more below)
+- FULL OUTER JOIN: All rows from both sides, matched where possible (SQLite added support for this fairly recently)
