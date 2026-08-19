@@ -80,18 +80,32 @@ VALUES
     (2, 5), (2, 4), (2, 2), (2, 8),
     (3, 2), (3, 3), (3, 4), (3, 7), (3, 9);
 
-SELECT * FROM outfit_pieces;
+-- SELECT * FROM outfit_pieces;
 
 ---------------------------------------------------------------------------------
 -- tests
 ---------------------------------------------------------------------------------
-INSERT INTO outfit_pieces (outfit_id, piece_id)
-VALUES
-    (1, 1), -- duplicate entry
-    (99, 1), -- non-existent outfit
-    (1, 99); -- non-existent piece
+-- INSERT INTO outfit_pieces (outfit_id, piece_id)
+-- VALUES
+--     (1, 1), -- duplicate entry
+--     (99, 1), -- non-existent outfit
+--     (1, 99); -- non-existent piece
 
--- SELECT * FROM pieces WHERE id = 4;
-DELETE FROM pieces WHERE id = 4; -- delete from piece to test cascade
+-- DELETE FROM pieces WHERE id = 4; -- delete from piece to test cascade
+-- SELECT * FROM outfit_pieces;
 
-SELECT * FROM outfit_pieces;
+-- SELECT outfits.name AS outfit_name, pieces.name AS piece_name, pieces.brand
+-- FROM outfit_pieces
+-- JOIN outfits on outfits.id = outfit_pieces.outfit_id
+-- JOIN pieces on pieces.id = outfit_pieces.piece_id; -- two-way join through junction table (outfit_pieces)
+
+-- SELECT pieces.name, pieces.brand -- view from pieces
+-- FROM outfit_pieces
+-- JOIN pieces ON pieces.id = outfit_pieces.piece_id -- inner join on pieces.id and outfit_pieces.piece_id
+-- WHERE outfit_pieces.outfit_id = 1; -- join where outfit_id is 1
+
+-- DELETE FROM outfit_pieces WHERE piece_id = 4; -- delete from outfit_pieces, piece 4 still exists in pieces
+-- SELECT pieces.name
+-- FROM pieces
+-- LEFT JOIN outfit_pieces ON pieces.id = outfit_pieces.piece_id -- left join pieces.id and outfit_pieces.piece_id
+-- WHERE outfit_pieces.piece_id IS NULL; -- join where piece_id NULL, i.e. piece not in outfit
