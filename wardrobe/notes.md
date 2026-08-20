@@ -1,4 +1,4 @@
-SQLite Quick Reference
+# SQLite Quick Reference
 
 CLI
 .schema [table]     - show table structure
@@ -64,7 +64,7 @@ SELECT * FROM a JOIN b ON a.id = b.a_id;
 
 ===============================================================================
 
-Other notes
+# Other Notes
 
 Every table should have a way to uniquely identify each row.
 That doesn't mean every table needs an id INTEGER PRIMARY KEY field.
