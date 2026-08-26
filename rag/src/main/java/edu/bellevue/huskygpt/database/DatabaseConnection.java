@@ -4,9 +4,12 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 
+/**
+ * Provides SQLite database connection for other classes
+ */
 public class DatabaseConnection {
 
-    private static final String DB_URL = "jdbc:sqlite:data/wardrobe.db"; //  JDBC url
+    private static final String DB_URL = "jdbc:sqlite:data/wardrobe.db"; // db path relative to working directory
         // sqlite: --> database type
         // wardrobe.db --> database file
         // private static final --> constant variable internally used by class itself

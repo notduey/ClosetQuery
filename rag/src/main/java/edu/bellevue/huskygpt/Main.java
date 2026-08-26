@@ -1,19 +1,17 @@
 package edu.bellevue.huskygpt;
 
-import edu.bellevue.huskygpt.database.DatabaseConnection;
-
-import java.sql.Connection;
-import java.sql.SQLException;
+import edu.bellevue.huskygpt.database.DatabaseInitializer;
+import edu.bellevue.huskygpt.database.PieceRepository;
 
 public class Main {
     public static void main(String[] args) {
+        DatabaseInitializer.initialize(); // make sure required db tables exist
 
-        try (Connection connection = DatabaseConnection.getConnection()) {
-            System.out.println("Connected to the SQLite database successfully.");
-        } catch (SQLException e) {
-            System.out.println("Connection failed:");
-            e.printStackTrace(); // print exception details and stack trace
-        }
-        // connection implements AutoCloseable, so connection.close() is called when try block ends
+        PieceRepository.addPiece("Jillian Toggle Boot", "FRYE"); // insert initial piece using JDBC
+
+        PieceRepository.printAllPieces();
     }
 }
+
+// Run after compiling:
+// java -cp target/classes:$HOME/.m2/repository/org/xerial/sqlite-jdbc/3.53.2.1/sqlite-jdbc-3.53.2.1.jar edu.bellevue.huskygpt.Main
