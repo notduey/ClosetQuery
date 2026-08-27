@@ -2,11 +2,11 @@ package edu.bellevue.huskygpt;
 
 import edu.bellevue.huskygpt.database.DatabaseInitializer;
 import edu.bellevue.huskygpt.database.DatabaseSeeder;
+
 import edu.bellevue.huskygpt.model.Piece;
-
 import edu.bellevue.huskygpt.database.PieceRepository;
-import edu.bellevue.huskygpt.retrieval.PieceTextFormatter;
-
+import edu.bellevue.huskygpt.retrieval.NaiveSemanticRetriever;
+import edu.bellevue.huskygpt.retrieval.RetrievalResult;
 import edu.bellevue.huskygpt.retrieval.EmbeddingModel;
 
 import java.util.List;
@@ -24,32 +24,38 @@ public class Main {
 
         // // print all pieces
         // for (Piece p : pieces) {
-        //     String retrievalText = PieceTextFormatter.format(p); // convert piece to embedding text
+        //     String retrievalText = PieceTextFormatter.format(p); // convert piece to formatted text
 
         //     System.out.println(retrievalText);
         //     System.out.println();
         // }
 
         try (EmbeddingModel model = new EmbeddingModel()) {
-            float[] reference = model.embed(
-                "A lightweight insulated jacket for cold weather."
-            );
+            PieceRepository repository = new PieceRepository();
 
-            float[] similar = model.embed(
-                "A warm jacket suitable for cool temperatures."
-            );
+            // Get all pieces from db
+            List<Piece> pieces = repository.getAllPieces();
 
-            float[] unrelated = model.embed(
-                "A breathable linen shirt for tropical climates."
-            );
+            // Create retriever
+            NaiveSemanticRetriever retriever = new NaiveSemanticRetriever(model);
 
-            float selfScore = EmbeddingModel.cosineSimilarity(similar, similar);
-            float similarityScore = EmbeddingModel.cosineSimilarity(reference, similar);
-            float unrelatedScore = EmbeddingModel.cosineSimilarity(reference, unrelated);
+            // Get top 3 pieces with highest similarity score
+            List<RetrievalResult> results = retriever.retrieve(
+                "What should I wear in hot weather?",
+                pieces,
+                10);
 
-            System.out.println("Self similarity: " + selfScore); // should be ~1
-            System.out.println("Similarity score: " + similarityScore); // should be higher than unrelated
-            System.out.println("Unrelated score: " + unrelatedScore);
+            // for each result display similarity score and piece
+            for (RetrievalResult result : results) {
+                Piece piece = result.piece();
+
+                System.out.printf(
+                    "%.4f - %s %s%n",
+                    result.similarityScore(),
+                    piece.getBrand(),
+                    piece.getName()
+                );
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -58,3 +64,15 @@ public class Main {
 
 // Run after compiling:
 // mvn exec:java
+
+// Results from running code above:
+// 0.6153 - COS Relaxed Linen Shirt
+// 0.6093 - Uniqlo AIRism Oversized T-Shirt
+// 0.5923 - Vintage Wool Cardigan
+// 0.5870 - Stussy 8-Ball Knit Sweater
+// 0.5836 - Patagonia Nano Puff Jacket
+// 0.5684 - Carhartt WIP Detroit Jacket
+// 0.5526 - Adidas Track Pants
+// 0.5461 - Nike Air Max 1
+// 0.5112 - Dr. Martens 1461 Leather Shoes
+// 0.4816 - Levi's 501 Original Fit Jeans
