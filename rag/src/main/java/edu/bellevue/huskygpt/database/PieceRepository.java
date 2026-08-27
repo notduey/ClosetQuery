@@ -10,7 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Handles creation and retrieval of wardrobe pieces from SQLite database
+ * Handles insertion and retrieval of wardrobe pieces from SQLite database
  */
 public class PieceRepository {
 
@@ -36,8 +36,8 @@ public class PieceRepository {
              PreparedStatement statement = connection.prepareStatement(sql)
         ) {
             // SQL handles id, date_added, last_worn, times_worn automatically
-            statement.setString(2, piece.getBrand()); // first ? = piece brand
-            statement.setString(1, piece.getName()); // second ? = piece name
+            statement.setString(1, piece.getBrand()); // first ? = piece brand
+            statement.setString(2, piece.getName()); // second ? = piece name
             statement.setString(3, piece.getCategory());
             statement.setString(4, piece.getSize());
             statement.setString(5, piece.getColor());

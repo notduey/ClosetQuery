@@ -68,9 +68,9 @@ public class DatabaseInitializer {
 
                         occasion TEXT CHECK(
                             occasion IN (
-                            'Beater',
-                            'Staple',
-                            'Reserved'
+                            'Casual',
+                            'Everyday',
+                            'Special Occasion'
                             )
                         ),
 
