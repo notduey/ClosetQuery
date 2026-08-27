@@ -3,3 +3,5 @@
 rag/target
 
 *.db
+
+rag/models/**/*.onnx
