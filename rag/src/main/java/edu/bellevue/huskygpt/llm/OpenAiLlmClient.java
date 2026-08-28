@@ -78,14 +78,15 @@ public class OpenAiLlmClient implements LlmClient {
             );
         }
 
-        // Parse JSON into JsonNode
+        // Deserialize JSON into JsonNode
         JsonNode root = objectMapper.readTree(response.body());
 
+        // Parse JSON response
         // Iterate through output text
         for (JsonNode output : root.path("output")) {
             //Iterate through output text in each output
             for (JsonNode content : output.path("content")) {
-                // Find content with type "output_text" and return its text
+                // Find content type "output_text" and return its text
                 if ("output_text".equals(content.path("type").asString())) {
                     return content.path("text").asString(); // return output text
                 }

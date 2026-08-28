@@ -14,7 +14,7 @@ import java.util.List;
  */
 public class PieceRepository {
 
-    public static void addPiece(Piece piece) {
+    public static int addPiece(Piece piece) throws SQLException {
         String sql = """
                 INSERT INTO pieces (
                     brand,
@@ -29,13 +29,14 @@ public class PieceRepository {
                     materials,
                     notes
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                RETURNING id
                 """; // placeholders (?) keep values separate from SQL structure
 
         try (Connection connection = DatabaseConnection.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)
         ) {
-            // SQL handles id, date_added, last_worn, times_worn automatically
+            // SQL handles id and date_added, last_worn, times_worn with default values
             statement.setString(1, piece.getBrand()); // first ? = piece brand
             statement.setString(2, piece.getName()); // second ? = piece name
             statement.setString(3, piece.getCategory());
@@ -48,15 +49,77 @@ public class PieceRepository {
             statement.setString(10, piece.getMaterials());
             statement.setString(11, piece.getNotes());
 
-            int rowsAffected = statement.executeUpdate(); // INSERT returns rows affected
-            System.out.println(rowsAffected + " piece(s) inserted.");
-        } catch (SQLException e) {
-            System.out.println("Error inserting piece:");
-            e.printStackTrace();
+            try (ResultSet resultSet = statement.executeQuery()) { // executeQuery to return id
+                if (resultSet.next()) {
+                    return resultSet.getInt("id");
+                }
+            }
+        }
+
+        throw new SQLException("Piece inserted but no id returned");
+    }
+
+        public int addExistingPiece(Piece piece) throws SQLException {
+        String sql = """
+                INSERT INTO pieces (
+                    brand,
+                    name,
+                    category,
+                    size,
+                    color,
+                    colorway,
+                    season,
+                    occasion,
+                    fit,
+                    materials,
+                    notes,
+                    last_worn,
+                    times_worn
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                RETURNING id
+                """;
+
+        try (Connection connection = DatabaseConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)
+        ) {
+            statement.setString(1, piece.getBrand());
+            statement.setString(2, piece.getName());
+            statement.setString(3, piece.getCategory());
+            statement.setString(4, piece.getSize());
+            statement.setString(5, piece.getColor());
+            statement.setString(6, piece.getColorway());
+            statement.setString(7, piece.getSeason());
+            statement.setString(8, piece.getOccasion());
+            statement.setString(9, piece.getFit());
+            statement.setString(10, piece.getMaterials());
+            statement.setString(11, piece.getNotes());
+            statement.setString(12, piece.getLastWorn());
+            statement.setInt(13, piece.getTimesWorn());
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (resultSet.next()) {
+                    return resultSet.getInt("id");
+                }
+            }
+        }
+
+        throw new SQLException("Piece inserted but no id returned");
+    }
+
+    public int removePiece(int id) throws SQLException {
+        String sql = "DELETE FROM pieces WHERE id = ?";
+
+        try (Connection connection = DatabaseConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)
+        ) {
+            statement.setInt(1, id);
+
+            return statement.executeUpdate();
         }
     }
 
-    public static List<Piece> getAllPieces() {
+    public static List<Piece> getAllPieces() throws SQLException {
         String sql = """
             SELECT
                 id,
@@ -108,11 +171,42 @@ public class PieceRepository {
 
                 pieces.add(piece); // add Piece to pieces list
             }
-        } catch (SQLException e) {
-            System.out.println("Error retrieving pieces:");
-            e.printStackTrace();
         }
 
         return pieces;
+    }
+
+    public Piece getPieceById(int id) throws SQLException {
+        String sql = "SELECT * FROM pieces WHERE id = ?";
+
+        try (Connection connection = DatabaseConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)
+        ) {
+            statement.setInt(1, id);
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (!resultSet.next()) {
+                    return null; // no row found with given id
+                }
+
+                return Piece.fromDatabase(
+                    resultSet.getInt("id"),
+                    resultSet.getString("brand"),
+                    resultSet.getString("name"),
+                    resultSet.getString("category"),
+                    resultSet.getString("size"),
+                    resultSet.getString("color"),
+                    resultSet.getString("colorway"),
+                    resultSet.getString("season"),
+                    resultSet.getString("occasion"),
+                    resultSet.getString("fit"),
+                    resultSet.getString("materials"),
+                    resultSet.getString("notes"),
+                    resultSet.getString("date_added"),
+                    resultSet.getString("last_worn"),
+                    resultSet.getInt("times_worn")
+                );
+            }
+        }
     }
 }

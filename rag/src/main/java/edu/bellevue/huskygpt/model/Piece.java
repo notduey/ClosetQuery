@@ -29,7 +29,6 @@ public class Piece {
 
     // Overloading constructors become inconvenient with many parameters
     // Creating setters is valid, but weakens encapsulation
-    // Eventually, separate creation and update methods will be implemented
 
     // Constructor
     public Piece(
@@ -126,6 +125,40 @@ public class Piece {
             materials,
             notes,
             dateAdded,
+            lastWorn,
+            timesWorn
+        );
+    }
+
+    public static Piece existing(
+        String brand,
+        String name,
+        String category,
+        String size,
+        String color,
+        String colorway,
+        String season,
+        String occasion,
+        String fit,
+        String materials,
+        String notes,
+        String lastWorn,
+        int timesWorn
+    ) {
+        return new Piece(
+            0, // database assigns real id when inserted
+            brand,
+            name,
+            category,
+            size,
+            color,
+            colorway,
+            season,
+            occasion,
+            fit,
+            materials,
+            notes,
+            null,
             lastWorn,
             timesWorn
         );

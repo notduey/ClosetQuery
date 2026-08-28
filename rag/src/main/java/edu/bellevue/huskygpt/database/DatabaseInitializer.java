@@ -9,7 +9,7 @@ import java.sql.Statement;
  */
 public class DatabaseInitializer {
 
-    public static void initialize() {
+    public static void initialize() throws SQLException {
         // Main wardrobe pieces table
         // Better to leave columns nullable, as default values that create unecessary noise in db
         // A default value like "No Brand" is embedded as literal content, not flagged like NULL
@@ -99,9 +99,6 @@ public class DatabaseInitializer {
         ) {
             statement.executeUpdate(sql); // execute schema-changing SQL
             System.out.println("Database initialized successfully.");
-        } catch (SQLException e) {
-            System.out.println("Database initialization failed:");
-            e.printStackTrace(); // print SQL error details
         }
     }
 }
