@@ -2,6 +2,8 @@
 
 rag/target
 
+.DS_Store
+
 *.db
 
 rag/models/**/*.onnx
