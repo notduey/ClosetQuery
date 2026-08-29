@@ -7,13 +7,16 @@ import edu.bellevue.huskygpt.database.DatabaseSeeder;
 import edu.bellevue.huskygpt.llm.LlmClient;
 import edu.bellevue.huskygpt.llm.OpenAiLlmClient;
 
+/**
+ * Main file for running RAG application
+ * Run Main twice if you deleted the database
+ */
 public class Main {
     public static void main(String[] args) {
-
         try {
-            // Initialize database if it doesn't exist
-            // Run Main twice if you want to reset the database
+            // Initialize database
             DatabaseInitializer.initialize();
+
             // DatabaseSeeder.seed(); // uncomment to reseed database
 
             // Initialize embedding model

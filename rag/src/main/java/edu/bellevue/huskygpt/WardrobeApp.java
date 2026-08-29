@@ -5,10 +5,13 @@ import ai.onnxruntime.OrtException;
 import edu.bellevue.huskygpt.database.PieceRepository;
 import edu.bellevue.huskygpt.llm.LlmClient;
 import edu.bellevue.huskygpt.llm.PromptBuilder;
+import edu.bellevue.huskygpt.llm.QueryIntent;
+import edu.bellevue.huskygpt.llm.QueryRouter;
 import edu.bellevue.huskygpt.model.Piece;
 import edu.bellevue.huskygpt.retrieval.EmbeddingModel;
 import edu.bellevue.huskygpt.retrieval.RetrievalResult;
 import edu.bellevue.huskygpt.retrieval.SemanticRetriever;
+import edu.bellevue.huskygpt.retrieval.StructuredRetriever;
 
 import java.sql.SQLException;
 import java.util.List;
@@ -24,6 +27,9 @@ public class WardrobeApp {
     private final LlmClient llmClient;
     private final Scanner scanner;
 
+    private final QueryRouter queryRouter;
+    private final StructuredRetriever structuredRetriever;
+
     private SemanticRetriever retriever; // not final as new retriever is created on add/delete
 
     public WardrobeApp(
@@ -35,6 +41,9 @@ public class WardrobeApp {
         this.model = model;
         this.llmClient = llmClient;
         this.scanner = new Scanner(System.in);
+
+        this.queryRouter = new QueryRouter(llmClient);
+        this.structuredRetriever = new StructuredRetriever(repository);
 
         refreshRetriever();
     }
@@ -97,11 +106,11 @@ public class WardrobeApp {
 
     private void askQuestion() {
         System.out.println();
-        System.out.println("Ask a wardrobe question, or enter 0 to return to the menu.");
-        System.out.println("----------------------------------------------------------");
+        System.out.println("Ask a wardrobe question or enter 0 to return to the menu.");
+        System.out.println("---------------------------------------------------------");
 
         while (true) {
-            System.out.print("Question (0 to return): ");
+            System.out.print("Question: ");
             String question = scanner.nextLine().trim();
 
             if (question.equals("0")) {
@@ -115,13 +124,74 @@ public class WardrobeApp {
             }
 
             try {
-                List<RetrievalResult> results = retriever.retrieve(question, 3);
+                QueryIntent intent = queryRouter.classify(question);
 
-                String prompt = PromptBuilder.build(question, results);
+                // List question
+                if (intent.type() == QueryIntent.RetrievalType.LIST_CATEGORY) {
+                    List<Piece> pieces = repository.getPiecesByCategory(intent.category());
+
+                    if (pieces.isEmpty()) {
+                        System.out.println("Answer: No information available.\n");
+                        continue; // ask again
+                    }
+
+                    System.out.println("Answer:");
+
+                    for (Piece piece : pieces) {
+                        System.out.println(
+                            "- "
+                            + (piece.getBrand() == null ? "" : piece.getBrand() + " ")
+                            + piece.getName()
+                        );
+                    }
+
+                    System.out.println();
+
+                    continue;
+                }
+
+                // Count question
+                if (intent.type() == QueryIntent.RetrievalType.COUNT_CATEGORY) {
+                    int count = repository.countPiecesByCategory(
+                            intent.category()
+                    );
+
+                    System.out.println(
+                        "Answer: You have "
+                        + count
+                        + " "
+                        + intent.category().toLowerCase()
+                        + " pieces.\n"
+                    );
+
+                    continue;
+                }
+
+                String prompt;
+
+                // Samantic question
+                if (intent.type() == QueryIntent.RetrievalType.SEMANTIC) {
+                    List<RetrievalResult> results = retriever.retrieve(question, intent.limit());
+
+                prompt = PromptBuilder.build(question, results);
+
+                // Remaining Structured questions
+                } else {
+                    List<Piece> pieces = structuredRetriever.retrieve(intent);
+
+                    // if SQL returns no results
+                    if (pieces.isEmpty()) {
+                        System.out.println("Answer: No information available.\n");
+
+                        continue; // ask again
+                    }
+
+                    prompt = PromptBuilder.buildFromPieces(question, pieces);
+                }
 
                 String answer = llmClient.generate(prompt);
 
-                System.out.println("\nAnswer: " + answer);
+                System.out.println("Answer: " + answer + "\n");
 
             } catch (Exception e) {
                 System.out.println("Failed to generate answer: " + e.getMessage());
@@ -151,7 +221,7 @@ public class WardrobeApp {
                 "Accessory"
             );
 
-            String size = readOptional("Size: ");
+            String size = readOptional("Size (Enter to skip): ");
 
             String color = readChoice(
                 "Color",
@@ -172,7 +242,7 @@ public class WardrobeApp {
                 "Multi"
             );
 
-            String colorway = readOptional("Colorway: ");
+            String colorway = readOptional("Colorway (Enter to skip): ");
 
             String season = readChoice(
                 "Season",
@@ -195,15 +265,15 @@ public class WardrobeApp {
                 "Slim"
             );
 
-            String materials = readOptional("Materials: ");
+            String materials = readOptional("Materials (Enter to skip): ");
             String notes = readOptional("Notes: ");
 
             int id;
 
             // Existing piece
             if (existing) {
-                String lastWorn = readOptional("Last worn (YYYY-MM-DD): ");
-                int timesWorn = readNonNegativeInt("Times worn: ");
+                String lastWorn = readOptional("Last worn YYYY-MM-DD (Enter to skip): ");
+                int timesWorn = readNonNegativeInt("Times worn (Enter to skip): ");
 
                 Piece piece = Piece.existing(
                         brand,
@@ -470,10 +540,11 @@ public class WardrobeApp {
 
         for (Piece p : pieces) {
             System.out.printf(
-                "%-3s %-20s %s%n",
+                "%-4s %-24s %-48s %s%n",
                 p.getId() + ".",
                 p.getBrand(),
-                p.getName()
+                p.getName(),
+                p.getCategory()
             );
         }
     }

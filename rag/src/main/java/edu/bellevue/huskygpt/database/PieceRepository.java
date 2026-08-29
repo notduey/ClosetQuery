@@ -14,7 +14,7 @@ import java.util.List;
  */
 public class PieceRepository {
 
-    public static int addPiece(Piece piece) throws SQLException {
+    public int addPiece(Piece piece) throws SQLException {
         String sql = """
                 INSERT INTO pieces (
                     brand,
@@ -119,7 +119,7 @@ public class PieceRepository {
         }
     }
 
-    public static List<Piece> getAllPieces() throws SQLException {
+    public List<Piece> getAllPieces() throws SQLException {
         String sql = """
             SELECT
                 id,
@@ -150,26 +150,7 @@ public class PieceRepository {
         ) {
             // resultSet has a cursor that starts before the first row
             while (resultSet.next()) { // move cursor to next returned row
-
-                Piece piece = Piece.fromDatabase(
-                    resultSet.getInt("id"),
-                    resultSet.getString("brand"),
-                    resultSet.getString("name"),
-                    resultSet.getString("category"),
-                    resultSet.getString("size"),
-                    resultSet.getString("color"),
-                    resultSet.getString("colorway"),
-                    resultSet.getString("season"),
-                    resultSet.getString("occasion"),
-                    resultSet.getString("fit"),
-                    resultSet.getString("materials"),
-                    resultSet.getString("notes"),
-                    resultSet.getString("date_added"),
-                    resultSet.getString("last_worn"),
-                    resultSet.getInt("times_worn")
-                ); // convert current ResultSet row into Piece object
-
-                pieces.add(piece); // add Piece to pieces list
+                pieces.add(mapPiece(resultSet));
             }
         }
 
@@ -179,34 +160,368 @@ public class PieceRepository {
     public Piece getPieceById(int id) throws SQLException {
         String sql = "SELECT * FROM pieces WHERE id = ?";
 
-        try (Connection connection = DatabaseConnection.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)
+        try (
+            Connection connection = DatabaseConnection.getConnection();
+            PreparedStatement statement = connection.prepareStatement(sql)
         ) {
             statement.setInt(1, id);
 
             try (ResultSet resultSet = statement.executeQuery()) {
                 if (!resultSet.next()) {
-                    return null; // no row found with given id
+                    return null;
                 }
 
-                return Piece.fromDatabase(
-                    resultSet.getInt("id"),
-                    resultSet.getString("brand"),
-                    resultSet.getString("name"),
-                    resultSet.getString("category"),
-                    resultSet.getString("size"),
-                    resultSet.getString("color"),
-                    resultSet.getString("colorway"),
-                    resultSet.getString("season"),
-                    resultSet.getString("occasion"),
-                    resultSet.getString("fit"),
-                    resultSet.getString("materials"),
-                    resultSet.getString("notes"),
-                    resultSet.getString("date_added"),
-                    resultSet.getString("last_worn"),
-                    resultSet.getInt("times_worn")
-                );
+                return mapPiece(resultSet);
             }
         }
     }
+
+    public List<Piece> getMostWornPieces(int limit, String category) throws SQLException {
+        validateLimit(limit);
+
+        String sql;
+
+        // Determine SQL query based on category
+        if (category == null) {
+            sql = """
+                SELECT *
+                FROM pieces
+                ORDER BY times_worn DESC, id ASC
+                LIMIT ?
+                """;
+        } else {
+            sql = """
+                SELECT *
+                FROM pieces
+                WHERE category = ? 
+                ORDER BY times_worn DESC, id ASC
+                LIMIT ?
+                """;
+        }
+
+        List<Piece> pieces = new ArrayList<>();
+
+        try (Connection connection = DatabaseConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)
+        ) {
+            if (category == null) { // only limit
+                statement.setInt(1, limit);
+            } else { // category and limit
+                statement.setString(1, category);
+                statement.setInt(2, limit);
+            }
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    pieces.add(mapPiece(resultSet));
+                }
+            }
+        }
+
+        return pieces;
+    }
+
+    public List<Piece> getLeastWornPieces(int limit, String category) throws SQLException {
+        validateLimit(limit);
+
+        String sql;
+
+        if (category == null) {
+            sql = """
+                SELECT *
+                FROM pieces
+                ORDER BY times_worn ASC, id ASC
+                LIMIT ?
+                """;
+        } else {
+            sql = """
+                SELECT *
+                FROM pieces
+                WHERE category = ? 
+                ORDER BY times_worn ASC, id ASC
+                LIMIT ?
+                """;
+        }
+
+        List<Piece> pieces = new ArrayList<>();
+
+        try (Connection connection = DatabaseConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)
+        ) {
+            if (category == null) {
+                statement.setInt(1, limit);
+            } else {
+                statement.setString(1, category);
+                statement.setInt(2, limit);
+            }
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    pieces.add(mapPiece(resultSet));
+                }
+            }
+        }
+
+        return pieces;
+    }
+
+    public List<Piece> getNeverWornPieces(String category) throws SQLException {
+        String sql;
+
+        if (category == null) {
+            sql = """
+                SELECT *
+                FROM pieces
+                WHERE times_worn = 0
+                ORDER BY id ASC
+                """;
+        } else {
+            sql = """
+                SELECT *
+                FROM pieces
+                WHERE times_worn = 0
+                    AND category = ?
+                ORDER BY id ASC
+                """;
+        }
+
+        List<Piece> pieces = new ArrayList<>();
+
+        try (
+            Connection connection = DatabaseConnection.getConnection();
+            PreparedStatement statement = connection.prepareStatement(sql)
+        ) {
+            if (category != null) { // add category if exists
+                statement.setString(1, category);
+            }
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    pieces.add(mapPiece(resultSet));
+                }
+            }
+        }
+
+        return pieces;
+    }
+
+    public List<Piece> getMostRecentlyWornPieces(int limit, String category) throws SQLException {
+        validateLimit(limit);
+
+        String sql;
+
+        if (category == null) {  // id ASC tiebreaker
+            sql = """
+                SELECT *
+                FROM pieces
+                ORDER BY 
+                    last_worn DESC,
+                    id ASC
+                LIMIT ?
+                """;
+        } else {
+            sql = """
+                SELECT *
+                FROM pieces
+                WHERE category = ?
+                ORDER BY 
+                    last_worn DESC,
+                    id ASC
+                LIMIT ?
+                """;
+        }
+
+        List<Piece> pieces = new ArrayList<>();
+
+        try (Connection connection = DatabaseConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)
+        ) {
+            if (category == null) { // only limit
+                statement.setInt(1, limit);
+            } else { // category and limit
+                statement.setString(1, category);
+                statement.setInt(2, limit);
+            }
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    pieces.add(mapPiece(resultSet));
+                }
+            }
+        }
+
+        return pieces;
+    }
+
+    public List<Piece> getLeastRecentlyWornPieces(int limit, String category) throws SQLException {
+        validateLimit(limit);
+
+        String sql;
+
+        if (category == null) {  // never worn pieces first then ordered by last worn
+            sql = """
+                SELECT *
+                FROM pieces
+                ORDER BY 
+                    last_worn IS NOT NULL,
+                    last_worn ASC,
+                    id ASC
+                LIMIT ?
+                """;
+        } else {
+            sql = """
+                SELECT *
+                FROM pieces
+                WHERE category = ?
+                ORDER BY 
+                    last_worn IS NOT NULL,
+                    last_worn ASC,
+                    id ASC
+                LIMIT ?
+                """;
+        }
+
+        List<Piece> pieces = new ArrayList<>();
+
+        try (Connection connection = DatabaseConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)
+        ) {
+            if (category == null) { // only limit
+                statement.setInt(1, limit);
+            } else { // category and limit
+                statement.setString(1, category);
+                statement.setInt(2, limit);
+            }
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    pieces.add(mapPiece(resultSet));
+                }
+            }
+        }
+
+        return pieces;
+    }
+
+    public List<Piece> getRecentlyAddedPieces(int limit, String category) throws SQLException {
+        validateLimit(limit);
+
+        String sql;
+
+        if (category == null) {  // id DESC as newer pieces have higher ids
+            sql = """
+                SELECT *
+                FROM pieces
+                ORDER BY date_added DESC, id DESC
+                LIMIT ?
+                """;
+        } else {
+            sql = """
+                SELECT *
+                FROM pieces
+                WHERE category = ?
+                ORDER BY date_added DESC, id ASC
+                LIMIT ?
+                """;
+        }
+
+        List<Piece> pieces = new ArrayList<>();
+
+        try (Connection connection = DatabaseConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)
+        ) {
+            if (category == null) {
+                statement.setInt(1, limit);
+            } else {
+                statement.setString(1, category);
+                statement.setInt(2, limit);
+            }
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    pieces.add(mapPiece(resultSet));
+                }
+            }
+        }
+
+        return pieces;
+    }
+
+    public List<Piece> getPiecesByCategory(String category) throws SQLException {
+        String sql = """
+            SELECT *
+            FROM pieces
+            WHERE category = ?
+            ORDER BY id ASC
+            """;
+
+        List<Piece> pieces = new ArrayList<>();
+
+        try (
+            Connection connection = DatabaseConnection.getConnection();
+            PreparedStatement statement = connection.prepareStatement(sql)
+        ) {
+            statement.setString(1, category);
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    pieces.add(mapPiece(resultSet));
+                }
+            }
+        }
+
+        return pieces;
+    }
+
+    public int countPiecesByCategory(String category) throws SQLException {
+        String sql = """
+                SELECT COUNT(*) AS total
+                FROM pieces
+                WHERE category = ?
+                """;
+
+        try (
+            Connection connection = DatabaseConnection.getConnection();
+            PreparedStatement statement = connection.prepareStatement(sql)
+        ) {
+            statement.setString(1, category);
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (resultSet.next()) {
+                    return resultSet.getInt("total");
+                }
+            }
+        }
+
+        return 0;
+    }
+
+    private Piece mapPiece(ResultSet resultSet) throws SQLException {
+        return Piece.fromDatabase(
+            resultSet.getInt("id"),
+            resultSet.getString("brand"),
+            resultSet.getString("name"),
+            resultSet.getString("category"),
+            resultSet.getString("size"),
+            resultSet.getString("color"),
+            resultSet.getString("colorway"),
+            resultSet.getString("season"),
+            resultSet.getString("occasion"),
+            resultSet.getString("fit"),
+            resultSet.getString("materials"),
+            resultSet.getString("notes"),
+            resultSet.getString("date_added"),
+            resultSet.getString("last_worn"),
+            resultSet.getInt("times_worn")
+        );
+    }
+
+    private void validateLimit(int limit) {
+        if (limit <= 0) {
+            throw new IllegalArgumentException(
+                    "Limit must be greater than 0."
+            );
+        }
+    }
+
 }

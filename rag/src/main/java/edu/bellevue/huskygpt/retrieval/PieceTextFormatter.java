@@ -3,7 +3,7 @@ package edu.bellevue.huskygpt.retrieval;
 import edu.bellevue.huskygpt.model.Piece;
 
 /**
- * Converts Piece objects into text representations for retrieval and embeddings
+ * Converts Piece objects into semantic text for embedding-based retrieval.
  */
 public class PieceTextFormatter {
 
@@ -12,10 +12,12 @@ public class PieceTextFormatter {
     public static String format(Piece piece) {
         StringBuilder text = new StringBuilder(); // build retrieval text in increments
 
-        // Identify piece naturally
-        text.append(piece.getBrand())
-            .append(" ")
-            .append(piece.getName())
+
+        if (piece.getBrand() != null) {
+            text.append(piece.getBrand()).append(" ");
+        }
+
+        text.append(piece.getName())
             .append(". ");
 
         // Combine broad color and colorway if present
