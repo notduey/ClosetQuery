@@ -276,20 +276,6 @@ There's always more opportunities to optimize this prompt!
 
 ClosetQuery uses SQLite through JDBC, main pieces table stores both descriptive wardrobe data and basic wear-history data.
 ```Piece``` entries have fields:
-- brand
-- name
-- category
-- size
-- color
-- colorway
-- season
-- occasion
-- fit
-- materials
-- notes
-- dateAdded
-- lastWorn
-- timesWorn
 
 | ID | Brand | Name | Category | Size | Color | Exact Colorway | Season | Occasion | Fit | Material | Notes | Date Added | Last Worn | Times Worn|
 |----|-------|------|----------|------|-------|----------------|--------|----------|-----|----------|-------|------------|-----------|----------|
