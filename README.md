@@ -65,7 +65,7 @@ This reduces resource overhead and as a plus, I got to learn a lot about the und
 
 ### Limitations to this Project
 
-As ClosetQuery is primarily an epxloratory project, the application currently:
+As ClosetQuery is primarily an exploratory project, the application currently:
 
 - Uses brute-force cosine similarity across the wardrobe index
 - Rebuilds the semantic index after pieces are added or removed
