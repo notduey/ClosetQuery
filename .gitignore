@@ -1,9 +1,9 @@
 .vscode/
 
-rag/target
+target/
+
+models/**/*.onnx
 
 .DS_Store
 
 *.db
-
-rag/models/**/*.onnx

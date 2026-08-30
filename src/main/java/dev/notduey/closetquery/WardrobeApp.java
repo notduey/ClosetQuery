@@ -1,0 +1,619 @@
+package dev.notduey.closetquery;
+
+import ai.onnxruntime.OrtException;
+import dev.notduey.closetquery.database.PieceRepository;
+import dev.notduey.closetquery.llm.LlmClient;
+import dev.notduey.closetquery.llm.PromptBuilder;
+import dev.notduey.closetquery.llm.QueryIntent;
+import dev.notduey.closetquery.llm.QueryRouter;
+import dev.notduey.closetquery.model.Piece;
+import dev.notduey.closetquery.retrieval.EmbeddingModel;
+import dev.notduey.closetquery.retrieval.RetrievalResult;
+import dev.notduey.closetquery.retrieval.SemanticRetriever;
+import dev.notduey.closetquery.retrieval.StructuredRetriever;
+
+import java.sql.SQLException;
+import java.util.List;
+import java.util.Scanner;
+
+/**
+ * Terminal-based application interface for ClosetQuery.
+ *
+ * <p>Coordinates wardrobe management and natural-language querying across
+ * semantic and structured retrieval paths. Semantic questions use
+ * embedding-based similarity search, while exact statistical and
+ * category-based questions are resolved through SQLite.</p>
+ *
+ * <p>Retrieved information is either returned directly for deterministic
+ * queries or supplied to the configured LLM for grounded response
+ * generation.</p>
+ */
+public class WardrobeApp {
+
+    private final PieceRepository repository;
+    private final EmbeddingModel model;
+    private final LlmClient llmClient;
+    private final Scanner scanner;
+
+    private final QueryRouter queryRouter;
+    private final StructuredRetriever structuredRetriever;
+
+    private SemanticRetriever retriever; // not final as new retriever is created on add/delete
+
+     /**
+     * Creates the wardrobe application and initializes its retrieval components.
+     *
+     * <p>The semantic retriever is built from the pieces currently stored in
+     * SQLite, while the structured retriever and query router are configured
+     * from the supplied repository and LLM client.</p>
+     *
+     * @param repository repository used to access wardrobe data
+     * @param model embedding model used for semantic retrieval
+     * @param llmClient LLM client used for query classification and generation
+     * @throws SQLException if wardrobe data cannot be loaded
+     * @throws OrtException if the semantic index cannot be initialized
+     */
+    public WardrobeApp(
+        PieceRepository repository,
+        EmbeddingModel model,
+        LlmClient llmClient
+    ) throws SQLException, OrtException {
+        this.repository = repository;
+        this.model = model;
+        this.llmClient = llmClient;
+        this.scanner = new Scanner(System.in);
+
+        this.queryRouter = new QueryRouter(llmClient);
+        this.structuredRetriever = new StructuredRetriever(repository);
+
+        refreshRetriever();
+    }
+
+    /**
+     * Starts the terminal application and processes menu selections until
+     * the user exits.
+     */
+    public void run() {
+        boolean running = true;
+
+        while (running) {
+            printMenu();
+
+            String choice = readMenuChoice();;
+
+            switch (choice) {
+                case "1" -> askQuestion();
+                case "2" -> addPiece();
+                case "3" -> removePiece();
+                case "4" -> listPieces();
+                case "0" -> running = false; // exit
+            }
+        }
+
+        scanner.close();
+        System.out.println("Closing wardrobe...");
+    }
+
+    private String readMenuChoice() {
+        // while choice not 0-4 keep asking
+        while (true) {
+            String choice = scanner.nextLine().trim();
+
+            if (choice.equals("0")
+                    || choice.equals("1")
+                    || choice.equals("2")
+                    || choice.equals("3")
+                    || choice.equals("4")) {
+                return choice;
+            }
+
+            System.out.print(
+                    "Invalid choice. Choose 1-4 or 0 to exit: "
+            );
+        }
+    }
+
+    private void printMenu() {
+        System.out.println(
+            """
+
+            Welcome to your wardrobe!
+            -------------------------
+            1. Ask AI
+            2. Add piece
+            3. Remove piece
+            4. List pieces
+            0. Exit
+            """
+        );
+        System.out.print("Choose an option: ");
+    }
+
+    /**
+     * Processes natural-language wardrobe questions.
+     *
+     * <p>Questions are first classified by {@link QueryRouter}. Exact list and
+     * count queries are answered directly from SQLite, semantic queries use
+     * embedding similarity search, and remaining structured queries use
+     * predefined SQL retrieval operations. Retrieved context is passed to the
+     * LLM when natural-language response generation is required.</p>
+     */
+    private void askQuestion() {
+        System.out.println();
+        System.out.println("Ask a wardrobe question or enter 0 to return to the menu.");
+        System.out.println("---------------------------------------------------------");
+
+        while (true) {
+            System.out.print("Question: ");
+            String question = scanner.nextLine().trim();
+
+            if (question.equals("0")) {
+                System.out.println("Returning to menu...");
+                return; // return to menu
+            }
+
+            if (question.isBlank()) {
+                System.out.println("Question cannot be empty.");
+                continue; // ask again
+            }
+
+            try {
+                QueryIntent intent = queryRouter.classify(question);
+
+                // List question
+                if (intent.type() == QueryIntent.RetrievalType.LIST_CATEGORY) {
+                    List<Piece> pieces = repository.getPiecesByCategory(intent.category());
+
+                    if (pieces.isEmpty()) {
+                        System.out.println("Answer: No information available.\n");
+                        continue; // ask again
+                    }
+
+                    System.out.println("Answer:");
+
+                    for (Piece piece : pieces) {
+                        System.out.println(
+                            "- "
+                            + (piece.getBrand() == null ? "" : piece.getBrand() + " ")
+                            + piece.getName()
+                        );
+                    }
+
+                    System.out.println();
+
+                    continue;
+                }
+
+                // Count question
+                if (intent.type() == QueryIntent.RetrievalType.COUNT_CATEGORY) {
+                    int count = repository.countPiecesByCategory(
+                            intent.category()
+                    );
+
+                    System.out.println(
+                        "Answer: You have "
+                        + count
+                        + " "
+                        + intent.category().toLowerCase()
+                        + " pieces.\n"
+                    );
+
+                    continue;
+                }
+
+                String prompt;
+
+                // Samantic question
+                if (intent.type() == QueryIntent.RetrievalType.SEMANTIC) {
+                    List<RetrievalResult> results = retriever.retrieve(question, intent.limit());
+
+                prompt = PromptBuilder.build(question, results);
+
+                // Remaining Structured questions
+                } else {
+                    List<Piece> pieces = structuredRetriever.retrieve(intent);
+
+                    // if SQL returns no results
+                    if (pieces.isEmpty()) {
+                        System.out.println("Answer: No information available.\n");
+
+                        continue; // ask again
+                    }
+
+                    prompt = PromptBuilder.buildFromPieces(question, pieces);
+                }
+
+                String answer = llmClient.generate(prompt);
+
+                System.out.println("Answer: " + answer + "\n");
+
+            } catch (Exception e) {
+                System.out.println("Failed to generate answer: " + e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Guides the user through adding a wardrobe piece to SQLite.
+     *
+     * <p>Existing pieces may include wear-history information. After a piece is
+     * persisted, the semantic index is rebuilt so the new piece is immediately
+     * available for retrieval.</p>
+     */
+    private void addPiece() {
+        System.out.println("Add Piece or enter 0 to return to menu at any time.");
+
+        try {
+            boolean existing = readYesNoCancel(
+                "Is this an existing wardrobe piece? (y/n): "
+            );
+
+            String brand = readRequired("Brand (required): ");
+            String name = readRequired("Name (required): ");
+
+            String category = readChoice(
+                "Category",
+                "Top",
+                "Bottom",
+                "Outerwear",
+                "Full-body",
+                "Footwear",
+                "Undergarment",
+                "Accessory"
+            );
+
+            String size = readOptional("Size (Enter to skip): ");
+
+            String color = readChoice(
+                "Color",
+                "Black",
+                "White",
+                "Gray",
+                "Brown",
+                "Beige",
+                "Red",
+                "Orange",
+                "Yellow",
+                "Green",
+                "Blue",
+                "Purple",
+                "Pink",
+                "Gold",
+                "Silver",
+                "Multi"
+            );
+
+            String colorway = readOptional("Colorway (Enter to skip): ");
+
+            String season = readChoice(
+                "Season",
+                "Spring/Summer",
+                "Fall/Winter",
+                "All-Season"
+            );
+
+            String occasion = readChoice(
+                "Occasion",
+               "Casual",
+                "Everyday",
+                "Special Occasion"
+            );
+
+            String fit = readChoice(
+                "Fit",
+                "Oversized",
+                "Regular",
+                "Slim"
+            );
+
+            String materials = readOptional("Materials (Enter to skip): ");
+            String notes = readOptional("Notes: ");
+
+            int id;
+
+            // Existing piece
+            if (existing) {
+                String lastWorn = readOptional("Last worn YYYY-MM-DD (Enter to skip): ");
+                int timesWorn = readNonNegativeInt("Times worn (Enter to skip): ");
+
+                Piece piece = Piece.existing(
+                        brand,
+                        name,
+                        category,
+                        size,
+                        color,
+                        colorway,
+                        season,
+                        occasion,
+                        fit,
+                        materials,
+                        notes,
+                        lastWorn,
+                        timesWorn
+                );
+
+                id = repository.addExistingPiece(piece);
+
+            } else {
+                Piece piece = new Piece(
+                        brand,
+                        name,
+                        category,
+                        size,
+                        color,
+                        colorway,
+                        season,
+                        occasion,
+                        fit,
+                        materials,
+                        notes
+                );
+
+                id = repository.addPiece(piece);
+            }
+
+            refreshRetriever(); // database changed, rebuild semantic index
+
+            System.out.println("Piece added with ID " + id + ".");
+
+        } catch (OperationCancelledException e) {
+            System.out.println("Returning to menu...");
+        } catch (Exception e) {
+            System.out.println(
+                    "Could not add piece: " + e.getMessage()
+            );
+        }
+    }
+
+    private String readRequired(String prompt) {
+        while (true) {
+            System.out.print(prompt);
+
+            String value = scanner.nextLine().trim();
+
+            if (value.equals("0")) {
+                throw new OperationCancelledException();
+            }
+
+            if (!value.isBlank()) {
+                return value;
+            }
+
+            System.out.println("This field is required. Enter 0 to return to menu.");
+        }
+    }
+
+    private String readOptional(String prompt) {
+        System.out.print(prompt);
+
+        String value = scanner.nextLine().trim();
+
+        if (value.equals("0")) {
+            throw new OperationCancelledException();
+        }
+
+        return value.isBlank() ? null : value; // null if empty, else return value
+    }
+
+    private int readNonNegativeInt(String prompt) {
+        while (true) {
+            System.out.print(prompt);
+
+            String input = scanner.nextLine().trim();
+
+            try {
+                int value = Integer.parseInt(input);
+
+                if (value >= 0) {
+                    return value;
+                }
+
+            } catch (NumberFormatException ignored) { // if input not a number
+            }
+
+            System.out.println("Enter a non-negative whole number.");
+        }
+    }
+
+    private int readPositiveIntOrCancel(String prompt) {
+        while (true) {
+            System.out.print(prompt);
+
+            String input = scanner.nextLine().trim();
+
+            if (input.equals("0")) {
+                throw new OperationCancelledException();
+            }
+
+            try {
+                int value = Integer.parseInt(input);
+
+                if (value > 0) {
+                    return value;
+                }
+
+            } catch (NumberFormatException ignored) {
+            }
+
+            System.out.print(
+                    "Enter a valid piece ID or 0 to return: "
+            );
+        }
+    }
+
+    private String readChoice(String label, String... options) {
+            System.out.println(label + ":");
+
+            // iterate and display options
+            for (int i = 0; i < options.length; i++) {
+                System.out.printf("%d. %s%n", i + 1, options[i]);
+            }
+
+            System.out.println("0. Return to menu");
+            System.out.print("Choose: ");
+
+        while (true) {
+            String input = scanner.nextLine().trim();
+
+            if (input.equals("0")) {
+                throw new OperationCancelledException();
+            }
+
+            try {
+                int choice = Integer.parseInt(input);
+
+                if (choice >= 1 && choice <= options.length) {
+                    return options[choice - 1];
+                }
+
+            } catch (NumberFormatException ignored) {
+            }
+
+            System.out.print(
+                "Enter a number from 1-" + options.length + " or 0 to return: "
+            );
+        }
+    }
+
+    /**
+     * Removes a selected wardrobe piece after user confirmation.
+     *
+     * <p>When a piece is successfully deleted from SQLite, the semantic index
+     * is rebuilt to remove its cached embedding.</p>
+     */
+    private void removePiece() {
+        try {
+            List<Piece> pieces = repository.getAllPieces();
+
+            if (pieces.isEmpty()) {
+                System.out.println("No pieces in wardrobe to remove.");
+                return;
+            }
+
+            printPieces(pieces);
+            System.out.println();
+            
+            int id = readPositiveIntOrCancel(
+                    "Enter piece ID to remove (0 to return): "
+            );
+
+            Piece piece = repository.getPieceById(id);
+
+            if (piece == null) {
+                System.out.println("No piece found with ID " + id + ".");
+                return;
+            }
+
+            boolean confirmed = readYesNoCancel(
+                    "Remove " + piece.getBrand() + " " + piece.getName() + "? (y/n, 0 to return): "
+            );
+
+            if (!confirmed) {
+                System.out.println("Removal cancelled.");
+                return;
+            }
+
+            int deletedRows = repository.removePiece(id);
+
+            if (deletedRows == 1) {
+                refreshRetriever();
+                System.out.println("Piece removed.");
+            } else {
+                System.out.println("Piece could not be removed.");
+            }
+
+        } catch (OperationCancelledException e) {
+            System.out.println("Returning to menu...");
+        } catch (Exception e) {
+            System.out.println(
+                    "Error removing piece: " + e.getMessage()
+            );
+        }
+    }
+
+    /**
+     * Displays all wardrobe pieces currently stored in SQLite.
+     */
+    private void listPieces() {
+        try {
+            List<Piece> pieces = repository.getAllPieces();
+
+            if (pieces.isEmpty()) {
+                System.out.println(
+                        "Your wardrobe is empty. Add some pieces first!"
+                );
+            } else {
+                printPieces(pieces);
+            }
+
+            System.out.println();
+            System.out.print("Enter 0 to return to menu: ");
+
+            while (!scanner.nextLine().trim().equals("0")) {
+                System.out.print("Enter 0 to return to menu: ");
+            }
+
+            System.out.println("Returning to menu...");
+
+        } catch (SQLException e) {
+            System.out.println(
+                    "Failed to list pieces: " + e.getMessage()
+            );
+        }
+    }
+
+    private boolean readYesNoCancel(String prompt) {
+        System.out.print(prompt);
+
+        while (true) {
+            String input = scanner.nextLine().trim();
+
+            if (input.equals("0")) {
+                throw new OperationCancelledException();
+            }
+
+            if (input.equalsIgnoreCase("y")) {
+                return true;
+            }
+
+            if (input.equalsIgnoreCase("n")) {
+                return false;
+            }
+
+            System.out.print("Enter y, n, or 0 to return: ");
+        }
+    }
+
+    private void printPieces(List<Piece> pieces) {
+        System.out.println("\nYour Collection:");
+        System.out.println("----------------");
+
+        for (Piece p : pieces) {
+            System.out.printf(
+                "%-4s %-24s %-48s %s%n",
+                p.getId() + ".",
+                p.getBrand(),
+                p.getName(),
+                p.getCategory()
+            );
+        }
+    }
+
+    /**
+     * Rebuilds the semantic retrieval index from the current wardrobe contents.
+     *
+     * <p>Piece embeddings are cached by {@link SemanticRetriever}, so the index
+     * must be rebuilt after wardrobe data is added or removed.</p>
+     *
+     * @throws SQLException if wardrobe pieces cannot be loaded
+     * @throws OrtException if an embedding cannot be generated
+     */
+    private void refreshRetriever() throws SQLException, OrtException {
+        List<Piece> pieces = repository.getAllPieces();
+
+        retriever = new SemanticRetriever(model, pieces);
+    }
+
+    private static class OperationCancelledException extends RuntimeException {
+    }
+}
